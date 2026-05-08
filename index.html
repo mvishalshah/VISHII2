@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>J.A.R.V.I.S — Personal AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap" rel="stylesheet"/>
+
+<!-- Firebase v10 compat SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-storage-compat.js"></script>
+
+<style>
+/* ═══════════════════════════════════════════
+   VARIABLES & RESET
+═══════════════════════════════════════════ */
+:root{
+  --bg:#050a12;--surface:#0b1422;--panel:#0f1e30;
+  --border:#1a3a5c;--accent:#00c8ff;--accent2:#0055dd;
+  --glow:rgba(0,200,255,0.18);--text:#c8e6f5;--muted:#4a7a9b;
+  --danger:#ff4060;--green:#00ff88;
+  --fhud:'Orbitron',monospace;--fbody:'Rajdhani',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--fbody);font-size:16px}
+
+/* ═══════════════════════════════════════════
+   SCREEN SYSTEM
+═══════════════════════════════════════════ */
+.screen{display:none;width:100%;height:100vh}
+.screen.active{display:flex}
+
+/* ═══════════════════════════════════════════
+   LOGIN SCREEN
+═══════════════════════════════════════════ */
+#login-screen{
+  align-items:center;justify-content:center;
+  background:radial-gradient(ellipse 80% 60% at 50% 40%,#001a33 0%,transparent 70%),var(--bg);
+  position:relative;overflow:hidden;
+}
+#login-screen::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 60px,rgba(0,200,255,0.02) 60px,rgba(0,200,255,0.02) 61px),
+             repeating-linear-gradient(90deg,transparent,transparent 60px,rgba(0,200,255,0.02) 60px,rgba(0,200,255,0.02) 61px);
+  pointer-events:none;
+}
+.login-card{position:relative;width:380px;display:flex;align-items:center;justify-content:center}
+.hud-ring{
+  position:absolute;width:340px;height:340px;border-radius:50%;
+  border:1px solid var(--border);
+  box-shadow:0 0 40px var(--glow),inset 0 0 40px var(--glow);
+  animation:spin 18s linear infinite;pointer-events:none;
+}
+.hud-ring::before{
+  content:'';position:absolute;inset:12px;border-radius:50%;
+  border:1px dashed rgba(0,200,255,0.15);
+}
+.hud-ring::after{
+  content:'';position:absolute;top:-4px;left:50%;transform:translateX(-50%);
+  width:8px;height:8px;background:var(--accent);border-radius:50%;
+  box-shadow:0 0 12px var(--accent);
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.login-inner{
+  position:relative;z-index:1;text-align:center;
+  padding:44px 32px;
+  background:rgba(11,20,34,0.95);
+  border:1px solid var(--border);border-radius:18px;
+  backdrop-filter:blur(14px);width:310px;
+  box-shadow:0 0 60px rgba(0,200,255,0.06);
+}
+.logo-icon{font-size:2.8rem;margin-bottom:8px;display:block;animation:pulse-glow 3s ease-in-out infinite}
+@keyframes pulse-glow{0%,100%{filter:drop-shadow(0 0 8px var(--accent))}50%{filter:drop-shadow(0 0 20px var(--accent))}}
+.logo-text{font-family:var(--fhud);font-size:1.9rem;font-weight:900;letter-spacing:0.22em;color:var(--accent);text-shadow:0 0 20px var(--accent)}
+.logo-sub{font-size:0.62rem;color:var(--muted);letter-spacing:0.1em;margin:4px 0 22px;text-transform:uppercase}
+.login-info{font-size:0.88rem;color:var(--muted);margin-bottom:26px;line-height:1.5}
+.btn-google{
+  display:flex;align-items:center;gap:10px;
+  background:#fff;color:#333;font-family:var(--fbody);
+  font-weight:600;font-size:0.95rem;border:none;border-radius:9px;
+  padding:13px 24px;cursor:pointer;margin:0 auto;
+  transition:transform .15s,box-shadow .15s;
+  box-shadow:0 4px 20px rgba(0,0,0,0.5);
+}
+.btn-google:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,0.6)}
+.btn-google:active{transform:translateY(0)}
+.privacy-note{margin-top:18px;font-size:0.72rem;color:var(--muted);line-height:1.6}
+
+/* ═══════════════════════════════════════════
+   APP LAYOUT
+═══════════════════════════════════════════ */
+#app-screen{flex-direction:row}
+
+/* ─ SIDEBAR ─ */
+#sidebar{
+  width:230px;min-width:230px;
+  background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;padding:18px 14px;gap:18px;
+  transition:width .3s;
+}
+.sidebar-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.user-badge{display:flex;align-items:center;gap:9px;overflow:hidden}
+#user-avatar{
+  width:38px;height:38px;border-radius:50%;
+  border:2px solid var(--accent);object-fit:cover;flex-shrink:0;
+  box-shadow:0 0 10px rgba(0,200,255,0.3);
+}
+.uname{font-family:var(--fhud);font-size:0.65rem;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ustatus{font-size:0.7rem;color:var(--green)}
+#logout-btn{
+  background:none;border:1px solid var(--border);color:var(--danger);
+  border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:1rem;
+  flex-shrink:0;transition:background .15s;
+}
+#logout-btn:hover{background:rgba(255,64,96,0.12)}
+.sidebar-nav{display:flex;flex-direction:column;gap:5px}
+.nav-btn{
+  background:none;border:1px solid transparent;color:var(--muted);
+  font-family:var(--fbody);font-size:0.92rem;font-weight:600;
+  padding:10px 13px;border-radius:9px;cursor:pointer;text-align:left;
+  transition:all .15s;
+}
+.nav-btn:hover{background:var(--panel);color:var(--text)}
+.nav-btn.active{background:rgba(0,200,255,0.08);border-color:var(--accent);color:var(--accent)}
+.sidebar-footer{margin-top:auto}
+.enc-badge{
+  font-size:0.68rem;color:var(--muted);display:block;text-align:center;
+  padding:8px;border:1px solid var(--border);border-radius:7px;
+}
+
+/* ─ MAIN AREA ─ */
+#main-area{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.tab{display:none;flex-direction:column;height:100vh;overflow:hidden}
+.tab.active{display:flex}
+
+/* ═══════════════════════════════════════════
+   CHAT TAB
+═══════════════════════════════════════════ */
+#chat-box{
+  flex:1;overflow-y:auto;padding:24px 28px;
+  display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth;
+}
+#chat-box::-webkit-scrollbar{width:4px}
+#chat-box::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.msg{
+  max-width:74%;padding:12px 16px;border-radius:13px;
+  line-height:1.65;font-size:0.95rem;animation:fadeUp .3s ease;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.msg.user{
+  align-self:flex-end;
+  background:linear-gradient(135deg,var(--accent2),#002a80);
+  color:#fff;border-bottom-right-radius:3px;
+}
+.msg.ai{
+  align-self:flex-start;background:var(--panel);
+  border:1px solid var(--border);color:var(--text);
+  border-bottom-left-radius:3px;
+}
+.msg-label{
+  font-family:var(--fhud);font-size:0.6rem;color:var(--accent);
+  margin-bottom:5px;letter-spacing:0.12em;
+}
+.msg.error{border-color:var(--danger);background:rgba(255,64,96,0.08)}
+.typing-dots{display:inline-flex;gap:4px;padding:2px 0}
+.typing-dots span{
+  width:6px;height:6px;background:var(--muted);border-radius:50%;
+  animation:dot-bounce .8s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2){animation-delay:.15s}
+.typing-dots span:nth-child(3){animation-delay:.3s}
+@keyframes dot-bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-6px)}}
+
+#input-bar{
+  display:flex;gap:8px;padding:14px 20px;
+  border-top:1px solid var(--border);
+  background:var(--surface);align-items:center;
+}
+#chat-input{
+  flex:1;background:var(--panel);border:1px solid var(--border);
+  border-radius:9px;color:var(--text);font-family:var(--fbody);
+  font-size:0.95rem;padding:11px 14px;outline:none;transition:border-color .2s;
+}
+#chat-input:focus{border-color:var(--accent)}
+#chat-input::placeholder{color:var(--muted)}
+#send-btn{
+  background:var(--accent);color:#000;border:none;border-radius:9px;
+  padding:11px 22px;font-family:var(--fhud);font-size:0.75rem;
+  font-weight:700;cursor:pointer;letter-spacing:0.06em;transition:opacity .15s,transform .1s;
+}
+#send-btn:hover{opacity:0.85}
+#send-btn:active{transform:scale(0.97)}
+#mic-btn{
+  background:var(--panel);border:1px solid var(--border);color:var(--text);
+  border-radius:9px;width:44px;height:44px;font-size:1.15rem;
+  cursor:pointer;transition:all .15s;flex-shrink:0;
+}
+#mic-btn.listening{
+  border-color:var(--danger);background:rgba(255,64,96,0.12);
+  animation:mic-pulse 1s infinite;
+}
+@keyframes mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,64,96,0.4)}50%{box-shadow:0 0 0 8px rgba(255,64,96,0)}}
+#mic-status{
+  text-align:center;font-size:0.76rem;color:var(--danger);
+  padding:2px 20px 5px;min-height:18px;background:var(--surface);
+}
+
+/* ═══════════════════════════════════════════
+   MEMORY TAB
+═══════════════════════════════════════════ */
+.tab-header{
+  display:flex;align-items:center;gap:14px;
+  padding:20px 28px 14px;border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.tab-header h2{
+  font-family:var(--fhud);font-size:0.85rem;color:var(--accent);
+  letter-spacing:0.12em;flex:1;
+}
+.btn-accent{
+  background:rgba(0,200,255,0.08);border:1px solid var(--accent);
+  color:var(--accent);border-radius:8px;padding:8px 16px;
+  font-family:var(--fbody);font-weight:600;font-size:0.84rem;
+  cursor:pointer;transition:background .15s;text-decoration:none;display:inline-block;
+}
+.btn-accent:hover{background:rgba(0,200,255,0.18)}
+.add-form{
+  display:none;flex-direction:column;gap:10px;
+  padding:14px 28px;border-bottom:1px solid var(--border);
+  background:var(--surface);flex-shrink:0;
+}
+.add-form.open{display:flex}
+.add-form input,.add-form textarea{
+  background:var(--panel);border:1px solid var(--border);
+  color:var(--text);font-family:var(--fbody);font-size:0.9rem;
+  padding:10px 13px;border-radius:8px;outline:none;resize:vertical;
+  transition:border-color .2s;
+}
+.add-form input:focus,.add-form textarea:focus{border-color:var(--accent)}
+.add-form input::placeholder,.add-form textarea::placeholder{color:var(--muted)}
+.add-form textarea{min-height:80px}
+.add-form button{
+  align-self:flex-start;background:var(--accent);color:#000;
+  border:none;border-radius:8px;padding:10px 22px;
+  font-family:var(--fhud);font-size:0.75rem;font-weight:700;cursor:pointer;
+  transition:opacity .15s;
+}
+.add-form button:hover{opacity:0.85}
+#memory-list{
+  flex:1;overflow-y:auto;padding:16px 28px;
+  display:flex;flex-direction:column;gap:10px;
+}
+#memory-list::-webkit-scrollbar{width:4px}
+#memory-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.memory-card{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:11px;padding:14px 16px;position:relative;
+  animation:fadeUp .3s ease;
+}
+.memory-card:hover{border-color:rgba(0,200,255,0.3)}
+.memory-card h4{
+  font-family:var(--fhud);font-size:0.72rem;color:var(--accent);margin-bottom:7px;
+}
+.memory-card p{font-size:0.88rem;color:var(--text);line-height:1.55;padding-right:28px}
+.memory-del{
+  position:absolute;top:10px;right:12px;
+  background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;
+  transition:color .15s;
+}
+.memory-del:hover{color:var(--danger)}
+.empty-state{color:var(--muted);font-size:0.88rem;text-align:center;padding:40px 20px}
+
+/* ═══════════════════════════════════════════
+   IMAGE VAULT TAB
+═══════════════════════════════════════════ */
+#image-gallery{
+  flex:1;overflow-y:auto;padding:20px 28px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:13px;align-content:start;
+}
+#image-gallery::-webkit-scrollbar{width:4px}
+#image-gallery::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.img-card{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:11px;overflow:hidden;cursor:pointer;
+  transition:transform .15s,box-shadow .15s;animation:fadeUp .3s ease;
+}
+.img-card:hover{
+  transform:translateY(-4px);
+  box-shadow:0 8px 24px rgba(0,200,255,0.12);
+  border-color:rgba(0,200,255,0.3);
+}
+.img-card img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.img-label{
+  padding:7px 10px;font-size:0.76rem;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.img-actions{display:flex;justify-content:flex-end;padding:0 8px 8px}
+.img-del{
+  background:none;border:none;color:var(--muted);font-size:0.9rem;
+  cursor:pointer;padding:2px 4px;transition:color .15s;
+}
+.img-del:hover{color:var(--danger)}
+
+/* ═══════════════════════════════════════════
+   IMAGE MODAL
+═══════════════════════════════════════════ */
+.modal{
+  position:fixed;inset:0;background:rgba(0,0,0,0.88);
+  display:flex;align-items:center;justify-content:center;z-index:9999;
+}
+.modal.hidden{display:none}
+.modal-inner{
+  position:relative;background:var(--panel);
+  border:1px solid var(--border);border-radius:16px;
+  padding:22px;max-width:92vw;max-height:92vh;
+  display:flex;flex-direction:column;gap:12px;align-items:center;
+  box-shadow:0 0 80px rgba(0,200,255,0.08);
+}
+.modal-inner img{max-height:72vh;max-width:84vw;border-radius:9px;object-fit:contain}
+.modal-inner p{font-size:0.9rem;color:var(--muted)}
+#modal-close{
+  position:absolute;top:12px;right:14px;
+  background:rgba(255,255,255,0.06);border:1px solid var(--border);
+  color:var(--text);font-size:1rem;cursor:pointer;
+  border-radius:6px;width:30px;height:30px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s;
+}
+#modal-close:hover{background:rgba(255,64,96,0.2);color:var(--danger)}
+
+/* ═══════════════════════════════════════════
+   TOAST NOTIFICATION
+═══════════════════════════════════════════ */
+#toast{
+  position:fixed;bottom:30px;right:30px;z-index:9998;
+  background:var(--panel);border:1px solid var(--border);
+  color:var(--text);padding:12px 20px;border-radius:9px;
+  font-size:0.88rem;box-shadow:0 8px 30px rgba(0,0,0,0.4);
+  transform:translateY(20px);opacity:0;
+  transition:all .3s;pointer-events:none;
+}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.success{border-color:var(--green);color:var(--green)}
+#toast.error{border-color:var(--danger);color:var(--danger)}
+
+/* ═══════════════════════════════════════════
+   UPLOAD PROGRESS
+═══════════════════════════════════════════ */
+.progress-bar-wrap{
+  width:100%;background:var(--border);border-radius:4px;height:4px;overflow:hidden;
+}
+.progress-bar{height:100%;background:var(--accent);width:0;transition:width .3s}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════ */
+@media(max-width:640px){
+  #sidebar{width:58px;min-width:58px;padding:12px 6px;gap:12px}
+  .uname,.ustatus,.sidebar-footer,.nav-label{display:none}
+  .nav-btn{padding:10px;text-align:center;font-size:1.1rem}
+  .user-badge{justify-content:center}
+  .tab-header{padding:14px 16px 10px}
+  #chat-box{padding:16px}
+  #input-bar{padding:10px 12px}
+  #memory-list,#image-gallery{padding:12px 14px}
+  .add-form{padding:12px 14px}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════════ -->
+<div id="login-screen" class="screen active">
+  <div class="login-card">
+    <div class="hud-ring"></div>
+    <div class="login-inner">
+      <span class="logo-icon">🤖</span>
+      <div class="logo-text">J.A.R.V.I.S</div>
+      <p class="logo-sub">Just A Rather Very Intelligent System</p>
+      <p class="login-info">Your personal AI assistant.<br/>Private, encrypted, always yours.</p>
+      <button id="google-login-btn" class="btn-google">
+        <svg width="20" height="20" viewBox="0 0 48 48">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.2 19 12 24 12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.3 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8H6.3C9.7 35.7 16.3 44 24 44z"/>
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.2 5.2C40.7 36.4 44 30.7 44 24c0-1.2-.1-2.4-.4-3.5z"/>
+        </svg>
+        Sign in with Google
+      </button>
+      <p class="privacy-note">🔐 Data encrypted & stored only in your account<br/>No other person can access your information</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MAIN APP SCREEN
+══════════════════════════════════════════ -->
+<div id="app-screen" class="screen">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-top">
+      <div class="user-badge">
+        <img id="user-avatar" src="" alt="avatar"/>
+        <div>
+          <div id="user-name" class="uname"></div>
+          <div class="ustatus">● Online</div>
+        </div>
+      </div>
+      <button id="logout-btn" title="Sign out">⏻</button>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" data-tab="chat">💬 <span class="nav-label">Chat</span></button>
+      <button class="nav-btn" data-tab="memory">🧠 <span class="nav-label">Memory</span></button>
+      <button class="nav-btn" data-tab="images">🖼 <span class="nav-label">Images</span></button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span class="enc-badge">🔐 AES-256 Encrypted</span>
+    </div>
+  </aside>
+
+  <!-- MAIN AREA -->
+  <main id="main-area">
+
+    <!-- ── CHAT TAB ── -->
+    <section id="tab-chat" class="tab active">
+      <div id="chat-box"></div>
+      <div id="mic-status"></div>
+      <div id="input-bar">
+        <button id="mic-btn" title="Speak to JARVIS">🎤</button>
+        <input id="chat-input" type="text" placeholder="Ask JARVIS anything…" autocomplete="off"/>
+        <button id="send-btn">SEND</button>
+      </div>
+    </section>
+
+    <!-- ── MEMORY TAB ── -->
+    <section id="tab-memory" class="tab">
+      <div class="tab-header">
+        <h2>🧠 MEMORY VAULT</h2>
+        <button id="add-memory-btn" class="btn-accent">+ Add Memory</button>
+      </div>
+      <div class="add-form" id="memory-form">
+        <input id="memory-title" type="text" placeholder="Title (e.g. Work Hours, Birthday, Medication)"/>
+        <textarea id="memory-content" placeholder="Content to remember… JARVIS will use this to answer your questions."></textarea>
+        <button id="save-memory-btn">Save Memory</button>
+      </div>
+      <div id="memory-list"></div>
+    </section>
+
+    <!-- ── IMAGE VAULT TAB ── -->
+    <section id="tab-images" class="tab">
+      <div class="tab-header">
+        <h2>🖼 IMAGE VAULT</h2>
+        <label for="img-upload" class="btn-accent" style="cursor:pointer">+ Upload Image</label>
+        <input type="file" id="img-upload" accept="image/*" style="display:none"/>
+      </div>
+      <div class="add-form" id="img-form">
+        <div id="img-preview-wrap" style="display:none">
+          <img id="img-preview" src="" alt="preview" style="max-height:120px;border-radius:8px;object-fit:contain;"/>
+        </div>
+        <input id="img-caption" type="text" placeholder="Label / caption for this image…"/>
+        <div class="progress-bar-wrap" id="progress-wrap" style="display:none">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <button id="confirm-upload-btn">Upload to Vault</button>
+      </div>
+      <div id="image-gallery"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- IMAGE MODAL -->
+<div id="img-modal" class="modal hidden">
+  <div class="modal-inner">
+    <button id="modal-close">✕</button>
+    <img id="modal-img" src="" alt=""/>
+    <p id="modal-caption"></p>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════
+     FIREBASE CONFIG — REPLACE THESE VALUES
+══════════════════════════════════════════ -->
+<script>
+// 🔧 STEP 1: Replace with YOUR Firebase config
+// Get from: Firebase Console → Project Settings → Your Apps → Web App
+const firebaseConfig = {
+  apiKey:            "YOUR_FIREBASE_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId:             "YOUR_APP_ID"
+};
+
+// 🔧 STEP 2: Replace with YOUR free Gemini API key
+// Get from: https://aistudio.google.com/app/apikey
+const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE";
+</script>
+
+<!-- ══════════════════════════════════════════
+     APP LOGIC
+══════════════════════════════════════════ -->
+<script>
+(function(){
+"use strict";
+
+/* ── INIT FIREBASE ────────────────────────── */
+firebase.initializeApp(firebaseConfig);
+const auth     = firebase.auth();
+const db       = firebase.firestore();
+const storage  = firebase.storage();
+const provider = new firebase.auth.GoogleAuthProvider();
+
+/* ── GEMINI ENDPOINT ──────────────────────── */
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+/* ── STATE ────────────────────────────────── */
+let currentUser    = null;
+let pendingFile    = null;
+let chatHistory    = [];
+
+/* ── ELEMENTS ─────────────────────────────── */
+const $  = id => document.getElementById(id);
+const loginScreen  = $("login-screen");
+const appScreen    = $("app-screen");
+const loginBtn     = $("google-login-btn");
+const logoutBtn    = $("logout-btn");
+const userAvatar   = $("user-avatar");
+const userNameEl   = $("user-name");
+const chatBox      = $("chat-box");
+const chatInput    = $("chat-input");
+const sendBtn      = $("send-btn");
+const micBtn       = $("mic-btn");
+const micStatus    = $("mic-status");
+const addMemBtn    = $("add-memory-btn");
+const memForm      = $("memory-form");
+const memTitle     = $("memory-title");
+const memContent   = $("memory-content");
+const saveMemBtn   = $("save-memory-btn");
+const memList      = $("memory-list");
+const imgUpload    = $("img-upload");
+const imgForm      = $("img-form");
+const imgCaption   = $("img-caption");
+const imgPreview   = $("img-preview");
+const imgPreviewW  = $("img-preview-wrap");
+const progressWrap = $("progress-wrap");
+const progressBar  = $("progress-bar");
+const confirmBtn   = $("confirm-upload-btn");
+const gallery      = $("image-gallery");
+const imgModal     = $("img-modal");
+const modalImg     = $("modal-img");
+const modalCap     = $("modal-caption");
+const modalClose   = $("modal-close");
+const toast        = $("toast");
+
+/* ════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════ */
+let toastTimer;
+function showToast(msg, type=""){
+  toast.textContent = msg;
+  toast.className = "show " + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ toast.className=""; }, 3200);
+}
+
+/* ════════════════════════════════════════════
+   AUTH
+════════════════════════════════════════════ */
+loginBtn.addEventListener("click", ()=>{
+  loginBtn.textContent = "Signing in…";
+  loginBtn.disabled = true;
+  auth.signInWithPopup(provider).catch(err=>{
+    showToast("Login failed: " + err.message, "error");
+    loginBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.2 19 12 24 12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.3 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8H6.3C9.7 35.7 16.3 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.2 5.2C40.7 36.4 44 30.7 44 24c0-1.2-.1-2.4-.4-3.5z"/></svg> Sign in with Google`;
+    loginBtn.disabled = false;
+  });
+});
+
+logoutBtn.addEventListener("click", ()=>{
+  auth.signOut();
+  showToast("Signed out.");
+});
+
+auth.onAuthStateChanged(user => {
+  if(user){
+    currentUser = user;
+    userAvatar.src = user.photoURL || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.displayName||"U") + "&background=0b1422&color=00c8ff";
+    userNameEl.textContent = (user.displayName||"User").split(" ")[0];
+    loginScreen.classList.remove("active");
+    appScreen.classList.add("active");
+    chatBox.innerHTML = "";
+    chatHistory = [];
+    loadMemories();
+    loadImages();
+    setTimeout(()=>{
+      addAIMessage("JARVIS online. How can I assist you today, " + (user.displayName||"").split(" ")[0] + "?", false);
+    }, 300);
+  } else {
+    currentUser = null;
+    loginScreen.classList.add("active");
+    appScreen.classList.remove("active");
+    chatBox.innerHTML = "";
+    chatHistory = [];
+    loginBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 15.2 19 12 24 12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34.1 6.5 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.3 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8H6.3C9.7 35.7 16.3 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.2 5.2C40.7 36.4 44 30.7 44 24c0-1.2-.1-2.4-.4-3.5z"/></svg> Sign in with Google`;
+    loginBtn.disabled = false;
+  }
+});
+
+/* ════════════════════════════════════════════
+   TAB NAVIGATION
+════════════════════════════════════════════ */
+document.querySelectorAll(".nav-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+    btn.classList.add("active");
+    $("tab-"+btn.dataset.tab).classList.add("active");
+  });
+});
+
+/* ════════════════════════════════════════════
+   CHAT
+════════════════════════════════════════════ */
+sendBtn.addEventListener("click", handleSend);
+chatInput.addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey) handleSend(); });
+
+async function handleSend(){
+  const text = chatInput.value.trim();
+  if(!text || !currentUser) return;
+  chatInput.value = "";
+  addUserMessage(text);
+  await askGemini(text);
+}
+
+function addUserMessage(text){
+  const div = document.createElement("div");
+  div.className = "msg user";
+  div.textContent = text;
+  chatBox.appendChild(div);
+  chatHistory.push({ role:"user", parts:[{text}] });
+  scrollChat();
+}
+
+function addAIMessage(text, save=true){
+  const div = document.createElement("div");
+  div.className = "msg ai";
+  div.innerHTML = `<div class="msg-label">J.A.R.V.I.S</div>${safe(text)}`;
+  chatBox.appendChild(div);
+  if(save) chatHistory.push({ role:"model", parts:[{text}] });
+  scrollChat();
+  speak(text);
+}
+
+function addTypingIndicator(){
+  const div = document.createElement("div");
+  div.className = "msg ai"; div.id = "typing-indicator";
+  div.innerHTML = `<div class="msg-label">J.A.R.V.I.S</div><div class="typing-dots"><span></span><span></span><span></span></div>`;
+  chatBox.appendChild(div);
+  scrollChat();
+  return div;
+}
+
+function scrollChat(){ chatBox.scrollTop = chatBox.scrollHeight; }
+
+/* ════════════════════════════════════════════
+   GEMINI AI
+════════════════════════════════════════════ */
+async function askGemini(userText){
+  // Gather memories for context
+  let memCtx = "";
+  try{
+    const snap = await db.collection("users").doc(currentUser.uid).collection("memories").get();
+    snap.forEach(doc=>{
+      const d = doc.data();
+      memCtx += `[${d.title}]: ${d.content}\n`;
+    });
+  }catch(_){}
+
+  // System instruction
+  const sysPrompt = `You are JARVIS, a highly intelligent personal AI assistant. Be concise, helpful, friendly, and professional. Address the user by their first name when suitable.
+The user's stored personal memories (use these to give personalized answers):
+${memCtx || "No memories stored yet."}
+Keep responses clear and under 200 words unless detail is essential.`;
+
+  // Build message array (keep last 8 turns for context)
+  const messages = [
+    { role:"user",  parts:[{text: sysPrompt}] },
+    { role:"model", parts:[{text: "Understood. I am JARVIS. Ready to assist."}] },
+    ...chatHistory.slice(-8),
+    { role:"user",  parts:[{text: userText}] }
+  ];
+
+  const typing = addTypingIndicator();
+  sendBtn.disabled = true;
+
+  try{
+    const res = await fetch(GEMINI_URL, {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ contents: messages })
+    });
+
+    if(!res.ok){
+      const errData = await res.json().catch(()=>({}));
+      throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if(!reply) throw new Error("Empty response from Gemini.");
+
+    typing.remove();
+    addAIMessage(reply);
+
+    // Persist chat to Firestore
+    db.collection("users").doc(currentUser.uid).collection("chats").add({
+      user: userText, ai: reply,
+      ts: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(()=>{});
+
+  }catch(err){
+    typing.remove();
+    const errDiv = document.createElement("div");
+    errDiv.className = "msg ai error";
+    errDiv.innerHTML = `<div class="msg-label">J.A.R.V.I.S</div>Error: ${safe(err.message)}`;
+    chatBox.appendChild(errDiv);
+    scrollChat();
+    showToast("Gemini error: " + err.message, "error");
+  }finally{
+    sendBtn.disabled = false;
+  }
+}
+
+/* ════════════════════════════════════════════
+   SPEECH — MIC INPUT
+════════════════════════════════════════════ */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null;
+
+if(SR){
+  recog = new SR();
+  recog.lang = "en-US";
+  recog.interimResults = false;
+  recog.maxAlternatives = 1;
+
+  recog.onresult = e =>{
+    const t = e.results[0][0].transcript;
+    chatInput.value = t;
+    micStatus.textContent = `Heard: "${t}"`;
+    setTimeout(()=>{ micStatus.textContent=""; }, 3000);
+    handleSend();
+  };
+  recog.onend = ()=>{ micBtn.classList.remove("listening"); micBtn.textContent="🎤"; };
+  recog.onerror = e=>{ micStatus.textContent="Mic error: "+e.error; micBtn.classList.remove("listening"); micBtn.textContent="🎤"; };
+}
+
+micBtn.addEventListener("click", ()=>{
+  if(!SR){ showToast("Use Chrome for voice support.", "error"); return; }
+  if(micBtn.classList.contains("listening")){ recog.stop(); return; }
+  micBtn.classList.add("listening");
+  micBtn.textContent = "🔴";
+  micStatus.textContent = "Listening…";
+  try{ recog.start(); }catch(e){ micStatus.textContent=""; micBtn.classList.remove("listening"); micBtn.textContent="🎤"; }
+});
+
+/* ════════════════════════════════════════════
+   SPEECH — JARVIS VOICE OUTPUT
+════════════════════════════════════════════ */
+function speak(text){
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate=0.93; u.pitch=0.82; u.volume=1;
+  // Try to pick a deep UK/male voice
+  const voices = window.speechSynthesis.getVoices();
+  const pick = voices.find(v=>
+    /google uk english male|microsoft david|daniel|alex/i.test(v.name)
+  ) || voices.find(v=>/male/i.test(v.name)) || voices[0];
+  if(pick) u.voice = pick;
+  window.speechSynthesis.speak(u);
+}
+window.speechSynthesis.onvoiceschanged = ()=> window.speechSynthesis.getVoices();
+
+/* ════════════════════════════════════════════
+   MEMORIES
+════════════════════════════════════════════ */
+addMemBtn.addEventListener("click", ()=> memForm.classList.toggle("open"));
+
+saveMemBtn.addEventListener("click", async()=>{
+  const title = memTitle.value.trim();
+  const content = memContent.value.trim();
+  if(!title||!content){ showToast("Fill both fields.", "error"); return; }
+  saveMemBtn.textContent = "Saving…"; saveMemBtn.disabled=true;
+  try{
+    await db.collection("users").doc(currentUser.uid).collection("memories").add({
+      title, content,
+      ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    memTitle.value=""; memContent.value="";
+    memForm.classList.remove("open");
+    showToast("Memory saved! ✓", "success");
+    loadMemories();
+  }catch(e){ showToast("Save failed: "+e.message,"error"); }
+  saveMemBtn.textContent="Save Memory"; saveMemBtn.disabled=false;
+});
+
+async function loadMemories(){
+  if(!currentUser) return;
+  memList.innerHTML = `<p class="empty-state">Loading memories…</p>`;
+  try{
+    const snap = await db.collection("users").doc(currentUser.uid)
+      .collection("memories").orderBy("ts","desc").get();
+    memList.innerHTML="";
+    if(snap.empty){ memList.innerHTML=`<p class="empty-state">No memories yet. Add things JARVIS should remember about you.</p>`; return; }
+    snap.forEach(doc => renderMemCard(doc.id, doc.data()));
+  }catch(e){ memList.innerHTML=`<p class="empty-state">Error loading: ${safe(e.message)}</p>`; }
+}
+
+function renderMemCard(id, d){
+  const card = document.createElement("div");
+  card.className="memory-card";
+  card.innerHTML=`<h4>${safe(d.title)}</h4><p>${safe(d.content)}</p><button class="memory-del" title="Delete memory">🗑</button>`;
+  card.querySelector(".memory-del").addEventListener("click", async()=>{
+    if(!confirm("Delete this memory?")) return;
+    await db.collection("users").doc(currentUser.uid).collection("memories").doc(id).delete();
+    card.remove();
+    showToast("Memory deleted.", "");
+    // refresh if empty
+    if(!memList.querySelector(".memory-card")) memList.innerHTML=`<p class="empty-state">No memories yet.</p>`;
+  });
+  memList.appendChild(card);
+}
+
+/* ════════════════════════════════════════════
+   IMAGE VAULT
+════════════════════════════════════════════ */
+imgUpload.addEventListener("change", e=>{
+  pendingFile = e.target.files[0];
+  if(!pendingFile) return;
+  imgCaption.value = pendingFile.name.replace(/\.[^.]+$/,"");
+  // Preview
+  const reader = new FileReader();
+  reader.onload = ev=>{ imgPreview.src=ev.target.result; imgPreviewW.style.display="block"; };
+  reader.readAsDataURL(pendingFile);
+  imgForm.classList.add("open");
+});
+
+confirmBtn.addEventListener("click", async()=>{
+  if(!pendingFile||!currentUser){ showToast("Select an image first.","error"); return; }
+  const caption = imgCaption.value.trim() || "Image";
+  const path = `users/${currentUser.uid}/images/${Date.now()}_${pendingFile.name}`;
+  const ref = storage.ref(path);
+
+  confirmBtn.disabled=true; confirmBtn.textContent="Uploading…";
+  progressWrap.style.display="block"; progressBar.style.width="0";
+
+  try{
+    const task = ref.put(pendingFile);
+    task.on("state_changed", snap=>{
+      const pct = (snap.bytesTransferred/snap.totalBytes*100).toFixed(0);
+      progressBar.style.width = pct+"%";
+    });
+    await task;
+    const url = await ref.getDownloadURL();
+    await db.collection("users").doc(currentUser.uid).collection("images").add({
+      caption, url, storagePath: path,
+      ts: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    // Reset form
+    imgForm.classList.remove("open");
+    imgCaption.value=""; imgUpload.value="";
+    imgPreview.src=""; imgPreviewW.style.display="none";
+    progressWrap.style.display="none"; progressBar.style.width="0";
+    pendingFile=null;
+    showToast("Image uploaded! ✓","success");
+    loadImages();
+  }catch(err){
+    showToast("Upload failed: "+err.message,"error");
+    progressWrap.style.display="none";
+  }
+  confirmBtn.disabled=false; confirmBtn.textContent="Upload to Vault";
+});
+
+async function loadImages(){
+  if(!currentUser) return;
+  gallery.innerHTML="";
+  try{
+    const snap = await db.collection("users").doc(currentUser.uid)
+      .collection("images").orderBy("ts","desc").get();
+    if(snap.empty){ gallery.innerHTML=`<p class="empty-state" style="grid-column:1/-1">No images yet. Upload photos to your vault.</p>`; return; }
+    snap.forEach(doc => renderImgCard(doc.id, doc.data()));
+  }catch(e){ gallery.innerHTML=`<p class="empty-state" style="grid-column:1/-1">Error: ${safe(e.message)}</p>`; }
+}
+
+function renderImgCard(id, d){
+  const card = document.createElement("div");
+  card.className="img-card";
+  card.innerHTML=`
+    <img src="${d.url}" alt="${safe(d.caption)}" loading="lazy"/>
+    <div class="img-label">${safe(d.caption)}</div>
+    <div class="img-actions"><button class="img-del" title="Delete">🗑</button></div>`;
+  card.querySelector("img").addEventListener("click", ()=>{
+    modalImg.src=d.url; modalCap.textContent=d.caption;
+    imgModal.classList.remove("hidden");
+  });
+  card.querySelector(".img-del").addEventListener("click", async e=>{
+    e.stopPropagation();
+    if(!confirm("Delete this image?")) return;
+    try{
+      await storage.ref(d.storagePath).delete();
+    }catch(_){}
+    await db.collection("users").doc(currentUser.uid).collection("images").doc(id).delete();
+    card.remove();
+    showToast("Image deleted.","");
+    if(!gallery.querySelector(".img-card")) gallery.innerHTML=`<p class="empty-state" style="grid-column:1/-1">No images yet.</p>`;
+  });
+  gallery.appendChild(card);
+}
+
+/* ── IMAGE MODAL ──── */
+modalClose.addEventListener("click", ()=>imgModal.classList.add("hidden"));
+imgModal.addEventListener("click", e=>{ if(e.target===imgModal) imgModal.classList.add("hidden"); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") imgModal.classList.add("hidden"); });
+
+/* ════════════════════════════════════════════
+   UTILITY
+════════════════════════════════════════════ */
+function safe(str){
+  return String(str)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")
+    .replace(/\n/g,"<br>");
+}
+
+})();
+</script>
+
+<!-- ══════════════════════════════════════════
+  SETUP INSTRUCTIONS (read then delete this block)
+  ═════════════════════════════════════════════
+  1. Get FREE Gemini API key → https://aistudio.google.com/app/apikey
+     Paste into: const GEMINI_API_KEY = "..."
+
+  2. Create Firebase project → https://console.firebase.google.com
+     Enable: Authentication (Google), Firestore, Storage
+     Paste your config into: const firebaseConfig = {...}
+
+  3. Firestore Rules (Security tab → Paste & Publish):
+     rules_version = '2';
+     service cloud.firestore {
+       match /databases/{database}/documents {
+         match /users/{userId}/{document=**} {
+           allow read, write: if request.auth != null && request.auth.uid == userId;
+         }
+       }
+     }
+
+  4. Storage Rules:
+     rules_version = '2';
+     service firebase.storage {
+       match /b/{bucket}/o {
+         match /users/{userId}/{allPaths=**} {
+           allow read, write: if request.auth != null && request.auth.uid == userId;
+         }
+       }
+     }
+
+  5. Add your GitHub Pages domain in Firebase:
+     Authentication → Settings → Authorized Domains → Add YOUR_USERNAME.github.io
+
+  6. Upload index.html to GitHub repo → Settings → Pages → Deploy from main
+══════════════════════════════════════════ -->
+</body>
+</html>
