@@ -496,14 +496,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--fbody);font-size:1
 <script>
 // 🔧 STEP 1: Replace with YOUR Firebase config
 // Get from: Firebase Console → Project Settings → Your Apps → Web App
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey:            "YOUR_FIREBASE_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey: "AIzaSyC5fwljzV4eabnQNzw2xbD1yyVBieJFXmI",
+  authDomain: "jarvis2026-ee63e.firebaseapp.com",
+  projectId: "jarvis2026-ee63e",
+  storageBucket: "jarvis2026-ee63e.firebasestorage.app",
+  messagingSenderId: "676658769511",
+  appId: "1:676658769511:web:7815bf552ad54c22d32ec2",
+  measurementId: "G-9C30YXVPNT"
 };
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
 // 🔧 STEP 2: Replace with YOUR free Gemini API key
 // Get from: https://aistudio.google.com/app/apikey
